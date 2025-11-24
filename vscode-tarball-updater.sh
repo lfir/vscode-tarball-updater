@@ -9,6 +9,12 @@ compare() {
     if (( vx > vy )) ; then echo 1; fi
 }
 
+cleanUpAndExitWithError() {
+    cd - &>/dev/null
+    rm -rf "$tmpdir"
+    exit 1
+}
+
 
 appParentDir="$HOME/Applications"
 appDir='VSCode-linux-x64'
@@ -17,7 +23,7 @@ currentVer=$(grep -Po '(?<="version": ")[0-9.]+' "$appParentDir"/$versFile)
 latestVer=$(wget -qO - 'https://github.com/microsoft/vscode/releases/latest' | grep -Po '(?<=tag/)[0-9.]+' | head -1)
 
 if [[ -z "$currentVer" || -z "$latestVer" ]]; then
-    echo "Could not determine current or latest version. Aborting."
+    echo 'Could not determine current or latest version. Aborting.'
     exit 1
 fi
 
@@ -29,26 +35,25 @@ cmp=$(compare "$latestVer" "$currentVer")
 if (( cmp == 1 )); then
     echo "Update available: $currentVer -> $latestVer. Performing replacement..."
     tmpdir=$(mktemp -d)
-    (cd "$tmpdir" && wget -qO - 'https://code.visualstudio.com/sha/download?build=stable&os=linux-x64' | tar xzf -) || {
+    cd "$tmpdir" || exit 1
+    (wget -qO - 'https://code.visualstudio.com/sha/download?build=stable&os=linux-x64' | tar xzf -) || {
         echo 'Download or extract of new version failed. Aborting.'
-        rm -r "$tmpdir"
-        exit 1
+        cleanUpAndExitWithError
     }
 
-    if mv "$appParentDir/$appDir" ./old ; then
-        if mv "$tmpdir/$appDir" "$appParentDir" ; then
-            rm -r "$tmpdir"
+    if mv "$appParentDir/$appDir" old ; then
+        if mv "$appDir" "$appParentDir" ; then
+            cd - &>/dev/null
+            rm -rf "$tmpdir"
             echo 'Replacement complete. Goodbye.'
         else
             echo 'Failed to move new version into place. Restoring backup...'
-            mv ./old "$appParentDir/$appDir" || echo 'Restore failed.'
-            rm -r "$tmpdir"
-            exit 1
+            mv old "$appParentDir/$appDir" || echo 'Restore failed.'
+            cleanUpAndExitWithError
         fi
     else
         echo 'Failed to move existing app directory. Aborting.'
-        rm -r "$tmpdir"
-        exit 1
+        cleanUpAndExitWithError
     fi
 else
     if (( cmp == 0 )); then
