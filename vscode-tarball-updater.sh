@@ -1,12 +1,16 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
+# Echo 0 if versions are equal, -1 if left version is smaller than right one, 1 vice versa
 compare() {
-    vx=${1//./}
-    vy=${2//./}
-    
-    if (( vx < vy )) ; then echo -1; fi
-    if (( vx == vy )) ; then echo 0; fi
-    if (( vx > vy )) ; then echo 1; fi
+    if [[ "$1" == "$2" ]]; then
+        echo 0
+        return
+    fi
+    # Print each arg in a separate line and use sort for version comparison
+    case $(printf '%s\n%s' "$1" "$2" | sort -V | head -1) in
+        "$1") echo -1 ;;  # 1st argument is smaller
+        "$2") echo 1  ;;  # 2nd argument is smaller
+    esac
 }
 
 cleanUpAndExitWithError() {
@@ -23,7 +27,7 @@ currentVer=$(grep -Po '(?<="version": ")[0-9.]+' "$appParentDir"/$versFile)
 latestVer=$(wget -qO - 'https://github.com/microsoft/vscode/releases/latest' | grep -Po '(?<=tag/)[0-9.]+' | head -1)
 
 if [[ -z "$currentVer" || -z "$latestVer" ]]; then
-    echo 'Could not determine current or latest version. Aborting.'
+    echo 'Could not determine current or latest version. Aborting.' >&2
     exit 1
 fi
 
@@ -37,7 +41,7 @@ if (( cmp == 1 )); then
     tmpdir=$(mktemp -d)
     cd "$tmpdir" || exit 1
     (wget -qO - 'https://code.visualstudio.com/sha/download?build=stable&os=linux-x64' | tar xzf -) || {
-        echo 'Download or extract of new version failed. Aborting.'
+        echo 'Download or extract of new version failed. Aborting.' >&2
         cleanUpAndExitWithError
     }
 
@@ -47,12 +51,12 @@ if (( cmp == 1 )); then
             rm -rf "$tmpdir"
             echo 'Replacement complete. Goodbye.'
         else
-            echo 'Failed to move new version into place. Restoring backup...'
-            mv old "$appParentDir/$appDir" || echo 'Restore failed.'
+            echo 'Failed to move new version into place. Restoring backup...' >&2
+            mv old "$appParentDir/$appDir" || echo 'Restore failed.' >&2
             cleanUpAndExitWithError
         fi
     else
-        echo 'Failed to move existing app directory. Aborting.'
+        echo 'Failed to move existing app directory. Aborting.' >&2
         cleanUpAndExitWithError
     fi
 else
